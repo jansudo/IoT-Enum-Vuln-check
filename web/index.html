@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="tr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IoT Güvenlik Tarayıcısı</title>
+<style>
+  :root{
+    color-scheme: light;
+    --bg:#e8f0e1; --surface-1:#ffffff; --surface-2:#f2f7ec; --surface-3:#e2ecd8;
+    --border:#c3d6b4; --text-1:#16220f; --text-2:#3e4d36; --text-3:#6b7a62;
+    --accent:#2f8f3e; --accent-2:#236e30;
+    /* durum renkleri — açık zemine göre okunur; anlam etiket metniyle taşınır */
+    --good:#0f8a12; --warning:#9a6a06; --serious:#c05a24; --critical:#c02626;
+    --seq:#3fa14a;
+    --shadow:0 1px 2px rgba(20,40,15,.07);
+    --radius:0px;
+    font-synthesis:none;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text-1);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    font-size:14px; line-height:1.5;
+  }
+  code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  a{color:#1c5fa8}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 16px 64px}
+
+  /* ---------- Header ---------- */
+  header{
+    position:sticky; top:0; z-index:20; backdrop-filter:blur(8px);
+    background:rgba(232,240,225,.92); border-bottom:1px solid var(--border);
+  }
+  .head-inner{max-width:1180px; margin:0 auto; padding:14px 16px;
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:650; font-size:16px}
+  .brand .dot{width:10px;height:10px;border-radius:0;background:var(--good);
+    box-shadow:0 0 0 3px rgba(15,138,18,.18)}
+  .brand small{display:block; font-weight:450; color:var(--text-3); font-size:11px}
+  .spacer{flex:1}
+
+  /* ---------- Controls ---------- */
+  .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  input[type=text], select{
+    background:var(--surface-1); color:var(--text-1); border:1px solid var(--border);
+    border-radius:0; padding:8px 10px; font-size:13px; font-family:inherit;
+  }
+  input[type=text]{width:160px}
+  input:focus,select:focus{outline:2px solid var(--accent); outline-offset:1px}
+  button{
+    background:var(--surface-1); color:var(--text-1); border:1px solid var(--border);
+    border-radius:0; padding:8px 14px; font-size:13px; font-weight:550;
+    cursor:pointer; transition:.15s; font-family:inherit;
+  }
+  button:hover{background:var(--surface-3)}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+  button.primary:hover{background:var(--accent-2)}
+  button.danger{border-color:#c9a1a1; color:#a83232}
+  button:disabled{opacity:.45; cursor:not-allowed}
+
+  .warn-bar{background:#fbf3dd; border:1px solid #e6cf92;
+    color:#7a5a10; border-radius:0; padding:8px 12px; font-size:12.5px; margin:16px 0}
+
+  /* ---------- Progress ---------- */
+  .progress-card{background:var(--surface-1); border:1px solid var(--border);
+    border-radius:0; padding:16px 18px; margin:16px 0; box-shadow:var(--shadow)}
+  .progress-top{display:flex; justify-content:space-between; align-items:baseline; gap:10px}
+  .phase{color:var(--text-2); font-size:13px}
+  .phase b{color:var(--text-1)}
+  .pct{font-variant-numeric:tabular-nums; font-weight:650; font-size:15px}
+  .bar{height:8px; border-radius:0; background:var(--surface-3); margin-top:12px; overflow:hidden}
+  .bar>span{display:block; height:100%; width:0;
+    background:linear-gradient(90deg,var(--accent-2),var(--accent)); transition:width .4s ease}
+  .state-chip{font-size:11px; padding:2px 9px; border-radius:0; border:1px solid var(--border);
+    color:var(--text-2); text-transform:uppercase; letter-spacing:.04em}
+  .state-chip.live{color:var(--accent-2); border-color:var(--accent); animation:pulse 1.4s infinite}
+  @keyframes pulse{50%{opacity:.55}}
+
+  /* ---------- KPI ---------- */
+  .kpis{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin:16px 0}
+  .kpi{background:var(--surface-1); border:1px solid var(--border); border-radius:0;
+    padding:14px 16px; box-shadow:var(--shadow)}
+  .kpi .label{color:var(--text-3); font-size:11.5px; text-transform:uppercase; letter-spacing:.05em}
+  .kpi .val{font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; margin-top:4px}
+  .kpi .val small{font-size:14px; color:var(--text-3); font-weight:500}
+  .kpi.crit .val{color:var(--critical)}
+  .kpi.accent .val{color:var(--accent)}
+
+  /* ---------- Charts ---------- */
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:16px 0}
+  .panel{background:var(--surface-1); border:1px solid var(--border); border-radius:0;
+    padding:16px 18px; box-shadow:var(--shadow)}
+  .panel h3{margin:0 0 14px; font-size:13px; color:var(--text-2); font-weight:600;
+    text-transform:uppercase; letter-spacing:.05em}
+  .rrow{display:grid; grid-template-columns:120px 1fr 34px; align-items:center; gap:10px; margin:9px 0}
+  .rrow .rlbl{display:flex; align-items:center; gap:7px; font-size:13px}
+  .rrow .rlbl .ic{width:16px; text-align:center}
+  .rbar{height:14px; border-radius:0; background:var(--surface-3); overflow:hidden}
+  .rbar>span{display:block; height:100%; border-radius:0; transition:width .5s}
+  .rrow .rn{text-align:right; font-variant-numeric:tabular-nums; font-weight:650}
+  .pbar-row{display:grid; grid-template-columns:150px 1fr 28px; align-items:center; gap:10px; margin:8px 0}
+  .pbar-row .plbl{font-size:12.5px; color:var(--text-2)}
+  .pbar-row .plbl b{color:var(--text-1)}
+  .pbar{height:12px; border-radius:0; background:var(--surface-3); overflow:hidden}
+  .pbar>span{display:block; height:100%; background:var(--seq); border-radius:0; transition:width .5s}
+  .pbar-row .pn{text-align:right; font-variant-numeric:tabular-nums; color:var(--text-2)}
+  .empty{color:var(--text-3); font-size:13px; padding:8px 0}
+
+  /* ---------- Device list ---------- */
+  .list-head{display:flex; align-items:center; justify-content:space-between; margin:22px 0 10px}
+  .list-head h2{font-size:16px; margin:0}
+  .filter-tabs{display:flex; gap:6px}
+  .filter-tabs button{padding:5px 12px; font-size:12px}
+  .filter-tabs button.on{background:var(--accent); border-color:var(--accent); color:#fff}
+  .devices{display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:12px}
+  .dev{background:var(--surface-1); border:1px solid var(--border); border-radius:0;
+    overflow:hidden; transition:.15s; box-shadow:var(--shadow)}
+  .dev:hover{border-color:var(--accent)}
+  .dev.new{animation:slidein .45s ease}
+  @keyframes slidein{from{opacity:0; transform:translateY(8px)}}
+  .dev-top{display:flex; gap:12px; padding:14px 16px; cursor:pointer; align-items:flex-start}
+  .dev-ic{font-size:11px; font-weight:700; letter-spacing:.03em; color:var(--accent-2);
+    background:var(--surface-3); border:1px solid var(--border); padding:4px 6px; min-width:38px; text-align:center}
+  .dev-main{flex:1; min-width:0}
+  .dev-ip{font-weight:650; font-size:15px}
+  .dev-meta{color:var(--text-3); font-size:12px; margin-top:2px}
+  .dev-meta .iot{color:var(--accent-2); font-weight:600}
+  .badge{font-size:11px; padding:3px 9px; border-radius:0; font-weight:650; white-space:nowrap;
+    display:inline-flex; align-items:center; gap:5px}
+  .badge .ic{font-size:11px}
+  .b-good{background:rgba(15,138,18,.12); color:#0f7a12; border:1px solid rgba(15,138,18,.4)}
+  .b-warning{background:rgba(154,106,6,.14); color:#8a6006; border:1px solid rgba(154,106,6,.45)}
+  .b-serious{background:rgba(192,90,36,.14); color:#b04d1f; border:1px solid rgba(192,90,36,.45)}
+  .b-critical{background:rgba(192,38,38,.12); color:#b31f1f; border:1px solid rgba(192,38,38,.45)}
+  .dev-stat{display:flex; gap:14px; padding:0 16px 12px; font-size:12px; color:var(--text-3)}
+  .dev-stat b{color:var(--text-2)}
+  .dev-detail{display:none; border-top:1px solid var(--border); padding:14px 16px; background:var(--surface-2)}
+  .dev.open .dev-detail{display:block}
+  .dev-detail h4{margin:0 0 8px; font-size:11.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:.05em}
+  .port-line{display:flex; gap:8px; font-size:12.5px; padding:3px 0; border-bottom:1px solid rgba(20,40,15,.07)}
+  .port-line .pp{width:56px; font-weight:650}
+  .port-line .ps{width:120px; color:var(--text-2)}
+  .port-line .pb{flex:1; color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  /* Bulgu kartlari - buyuk & detayli */
+  .vuln{padding:13px 15px; margin:10px 0; border-radius:0;
+    background:var(--surface-1); border:1px solid var(--border); border-left:4px solid var(--border)}
+  .vuln.critical{border-left-color:var(--critical)}
+  .vuln.serious{border-left-color:var(--serious)}
+  .vuln.warning{border-left-color:var(--warning)}
+  .vuln.medium{border-left-color:#2a6db0}
+  .vuln.good{border-left-color:var(--good)}
+  .vuln-head{display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:7px}
+  .sev-chip{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+    padding:3px 10px; border-radius:0}
+  .sev-chip.critical{background:rgba(192,38,38,.12); color:#b31f1f; border:1px solid rgba(192,38,38,.5)}
+  .sev-chip.serious{background:rgba(192,90,36,.14); color:#b04d1f; border:1px solid rgba(192,90,36,.45)}
+  .sev-chip.warning{background:rgba(154,106,6,.14); color:#8a6006; border:1px solid rgba(154,106,6,.45)}
+  .sev-chip.medium{background:rgba(42,109,176,.12); color:#255fa0; border:1px solid rgba(42,109,176,.45)}
+  .sev-chip.good{background:rgba(15,138,18,.12); color:#0f7a12; border:1px solid rgba(15,138,18,.45)}
+  .vuln-cve{font-family:ui-monospace,monospace; font-size:13px; font-weight:650}
+  .vuln-cve a{color:#1c5fa8; text-decoration:none}
+  .vuln-cve a:hover{text-decoration:underline}
+  .vuln-title{font-size:13.5px; font-weight:600; margin-bottom:4px}
+  .vuln-desc{color:var(--text-2); font-size:13px; line-height:1.55}
+  .vuln-meta{display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:11.5px; color:var(--text-3)}
+  .vuln-meta b{color:var(--text-2); font-weight:600}
+  .vuln-vector{font-family:ui-monospace,monospace}
+  .vsrc{font-size:10px; padding:2px 7px; border-radius:0; background:rgba(28,95,168,.12);
+    color:#1c5fa8; border:1px solid rgba(28,95,168,.35)}
+  .vuln-empty{padding:12px 14px; color:#0f7a12; background:rgba(15,138,18,.08);
+    border:1px solid rgba(15,138,18,.3); border-radius:0; font-size:13px}
+  .fw-dl-box{display:none; margin-top:14px; padding:14px 16px; border-radius:0;
+    background:var(--surface-2); border:1px solid var(--border)}
+  .fw-dl-box .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px}
+  .btn-dl{background:var(--good); border-color:var(--good); color:#fff; font-weight:700}
+  .btn-dl:hover{filter:brightness(1.08)}
+  .mt{margin-top:14px}
+
+  /* ---------- Log konsolu ---------- */
+  .console{background:var(--surface-2); border:1px solid var(--border); border-radius:0;
+    margin:16px 0; overflow:hidden}
+  .console-head{display:flex; align-items:center; gap:10px; padding:9px 14px;
+    border-bottom:1px solid var(--border); background:var(--surface-3)}
+  .console-head .dots{display:none}
+  .console-head h3{margin:0; font-size:12px; color:var(--text-2); text-transform:uppercase; letter-spacing:.05em}
+  .console-head .spacer{flex:1}
+  .console-head button{padding:4px 10px; font-size:11px}
+  .log-body{height:200px; overflow-y:auto; padding:10px 14px; font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:12px; line-height:1.65; background:var(--surface-1)}
+  .log-line{white-space:pre-wrap; word-break:break-word}
+  .log-line .lt{color:var(--text-3); margin-right:8px}
+  .log-line.info .lm{color:var(--text-2)}
+  .log-line.ok   .lm{color:#0f7a12}
+  .log-line.warn .lm{color:#9a6a06}
+  .log-line.head .lm{color:var(--accent-2); font-weight:650}
+  .log-body::-webkit-scrollbar{width:9px} .log-body::-webkit-scrollbar-thumb{background:var(--border); border-radius:0}
+
+  /* ---------- Firmware analizi ---------- */
+  .fw-panel{background:var(--surface-1); border:1px solid var(--border); border-radius:0;
+    padding:18px; margin:16px 0; box-shadow:var(--shadow)}
+  .fw-panel h2{font-size:16px; margin:0 0 4px}
+  .fw-sub{color:var(--text-3); font-size:12.5px; margin-bottom:14px}
+  .fw-drop{border:1.5px dashed var(--border); border-radius:0; padding:22px; text-align:center;
+    cursor:pointer; transition:.15s; background:var(--surface-2)}
+  .fw-drop:hover,.fw-drop.drag{border-color:var(--accent); background:var(--surface-3)}
+  .fw-drop .big{font-size:20px; font-weight:700; color:var(--accent-2)} .fw-drop small{color:var(--text-3)}
+  .fw-or{text-align:center; color:var(--text-3); font-size:12px; margin:10px 0}
+  .fw-pathrow{display:flex; gap:8px} .fw-pathrow input{flex:1}
+  .fw-result{margin-top:16px; display:none}
+  .fw-file{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px}
+  .fw-file .cell{background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:10px 12px}
+  .fw-file .cell .k{color:var(--text-3); font-size:11px; text-transform:uppercase; letter-spacing:.04em}
+  .fw-file .cell .v{font-size:14px; font-weight:600; margin-top:3px; word-break:break-all}
+  .fw-sig{display:inline-flex; align-items:center; gap:6px; background:var(--surface-3); border:1px solid var(--border);
+    border-radius:0; padding:4px 11px; font-size:12px; margin:3px 4px 3px 0}
+  .fw-sig.filesystem{border-color:#9cc0e6; color:#1c5fa8}
+  .fw-sig.boot{border-color:#e0c78e; color:#8a6006}
+  .fw-sig.crypto{border-color:#d8a6c4; color:#9a2b6a}
+  .footer{color:var(--text-3); font-size:12px; text-align:center; margin-top:32px}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)} .grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="head-inner">
+    <div class="brand">
+      <span class="dot" id="statusDot"></span>
+      <div>IoT Güvenlik Tarayıcısı
+        <small>Ağ keşfi · Port tarama · Eski-sürüm denetimi</small></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="controls">
+      <input type="text" id="network" placeholder="192.168.1.0/24" title="Taranacak ağ (CIDR)">
+      <select id="mode" title="Tarama modu">
+        <option value="deep">Gerçek CVE (nmap + NVD)</option>
+        <option value="quick">Hızlı (banner ipuçları)</option>
+        <option value="full">Tam (1–1024)</option>
+        <option value="demo">Demo (sunum provası)</option>
+      </select>
+      <button class="primary" id="scanBtn">Taramayı Başlat</button>
+      <button class="danger" id="stopBtn" disabled>Durdur</button>
+      <button id="exportBtn" disabled>Rapor</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="warn-bar"><b>Etik uyarı:</b> Bu araç yalnızca size ait ya da tarama için
+    açık izin aldığınız ağlarda kullanılmalıdır. İzinsiz tarama yasa dışıdır.</div>
+
+  <div class="progress-card">
+    <div class="progress-top">
+      <div class="phase"><span class="state-chip" id="stateChip">hazır</span>
+        <b id="phaseText">Başlamak için “Taramayı Başlat”a basın</b></div>
+      <div class="pct" id="pctText">0%</div>
+    </div>
+    <div class="bar"><span id="barFill"></span></div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="label">Cihaz</div><div class="val" id="kTotal">0</div></div>
+    <div class="kpi accent"><div class="label">IoT Cihaz</div><div class="val" id="kIot">0</div></div>
+    <div class="kpi"><div class="label">Açık Port</div><div class="val" id="kPorts">0</div></div>
+    <div class="kpi crit"><div class="label">Zafiyetli</div><div class="val" id="kVuln">0</div></div>
+    <div class="kpi"><div class="label">Ort. Risk</div><div class="val" id="kRisk">0<small>/100</small></div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h3>Risk Dağılımı</h3>
+      <div id="riskChart"></div>
+    </div>
+    <div class="panel">
+      <h3>En Sık Açık Portlar</h3>
+      <div id="portChart"></div>
+    </div>
+  </div>
+
+  <!-- Canlı log konsolu: arka planda ne yapıldığını gösterir -->
+  <div class="console">
+    <div class="console-head">
+      <div class="dots"><i style="background:#e34948"></i><i style="background:#eda100"></i><i style="background:#0ca30c"></i></div>
+      <h3>Canlı Log — arka plan işlemleri</h3>
+      <div class="spacer"></div>
+      <button id="logClear">Temizle</button>
+    </div>
+    <div class="log-body" id="logBody"><div class="log-line info"><span class="lm">Tarama başlatınca burada canlı log akacak…</span></div></div>
+  </div>
+
+  <div class="list-head">
+    <h2>Cihazlar</h2>
+    <div class="filter-tabs" id="filters">
+      <button class="on" data-f="all">Tümü</button>
+      <button data-f="iot">IoT</button>
+      <button data-f="vuln">Zafiyetli</button>
+    </div>
+  </div>
+  <div class="devices" id="devices"></div>
+  <div class="empty" id="devEmpty">Henüz cihaz taranmadı.</div>
+
+  <!-- Firmware imajı statik analizi -->
+  <div class="fw-panel">
+    <h2>Firmware Analizi</h2>
+    <div class="fw-sub">Bir cihazın firmware imajını (.bin/.img/.trx…) yükle; gömülü dosya
+      sistemleri, sabit-kodlu parolalar/anahtarlar ve eski bileşenler (→ gerçek CVE) çıkarılır.</div>
+
+    <!-- Firmware İNDİRME: URL'den .bin çek → tarayıcıya indir → istersen analiz et -->
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-weight:600;margin-bottom:4px">Firmware İndir (URL'den .bin)</div>
+      <div class="fw-sub" style="margin-bottom:10px">Satıcı firmware linkini ya da cihazın yedek/indirme
+        uç noktasını gir; sunucu indirir, sana <b>.bin olarak verir</b> (elle analiz için) ve istersen
+        yerleşik analizciye tek tıkla gönderirsin.</div>
+      <div class="fw-pathrow">
+        <input type="text" id="dlUrl" placeholder="https://.../firmware.bin  ya da  http://192.168.1.1/backup.bin">
+        <button class="primary" id="dlBtn">İndir</button>
+      </div>
+      <div class="console" style="margin-top:12px">
+        <div class="console-head">
+          <div class="dots"><i style="background:#e34948"></i><i style="background:#eda100"></i><i style="background:#0ca30c"></i></div>
+          <h3>İndirme logu</h3>
+        </div>
+        <div class="log-body" id="dlLog" style="height:130px"><div class="log-line info"><span class="lm">İndirme başlatınca ilerleme burada görünür…</span></div></div>
+      </div>
+      <div class="fw-dl-box" id="dlResult">
+        <div><b id="dlName">firmware.bin</b> · <span id="dlSize" class="mono"></span></div>
+        <div class="mono" id="dlSha" style="color:var(--text-3);font-size:11px;margin-top:4px"></div>
+        <div class="row">
+          <a id="dlDownload" class="btn-dl" download style="text-decoration:none;padding:8px 14px;border-radius:0;border:1px solid var(--good);display:inline-block">.bin dosyasını indir</a>
+          <button id="dlAnalyze">Bunu şimdi analiz et</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="grabbedWrap" style="display:none;margin-bottom:16px">
+      <div style="font-weight:600;margin-bottom:8px">Cihazlardan Çekilen Dosyalar</div>
+      <div id="grabbedList"></div>
+    </div>
+
+    <div class="fw-drop" id="fwDrop">
+      <div class="big">DOSYA SEÇ</div>
+      <div>Firmware dosyasını buraya sürükle ya da <b>tıklayıp seç</b></div>
+      <small>binwalk imza taraması · entropi · strings · NVD CVE eşleştirme</small>
+      <input type="file" id="fwFile" style="display:none">
+    </div>
+    <div class="fw-or">— veya sunucudaki bir dosya yolu —</div>
+    <div class="fw-pathrow">
+      <input type="text" id="fwPath" placeholder="/home/kullanici/firmware.bin">
+      <button class="primary" id="fwAnalyze">Analiz Et</button>
+    </div>
+
+    <div class="console" style="margin-top:14px">
+      <div class="console-head">
+        <div class="dots"><i style="background:#e34948"></i><i style="background:#eda100"></i><i style="background:#0ca30c"></i></div>
+        <h3>Firmware analiz logu</h3>
+      </div>
+      <div class="log-body" id="fwLog" style="height:160px"><div class="log-line info"><span class="lm">Analiz başlatınca adımlar burada görünecek…</span></div></div>
+    </div>
+
+    <div class="fw-result" id="fwResult">
+      <div class="fw-file" id="fwFileInfo"></div>
+      <div id="fwSigs" style="margin-bottom:12px"></div>
+      <h4 style="margin:0 0 8px;font-size:11.5px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em">Güvenlik Bulguları</h4>
+      <div id="fwFindings"></div>
+      <h4 style="margin:14px 0 8px;font-size:11.5px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em">Bileşenler & Gerçek CVE'ler (NVD)</h4>
+      <div id="fwComponents"></div>
+    </div>
+  </div>
+
+  <div class="footer">Bilgi Güvenliği ödevi · Eğitim amaçlı · Yalnızca izinli ağlarda kullanın</div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const RISK = {
+  critical:{c:'var(--critical)', ic:'', lbl:'Kritik'},
+  serious :{c:'var(--serious)',  ic:'', lbl:'Ciddi'},
+  warning :{c:'var(--warning)',  ic:'', lbl:'Uyarı'},
+  good    :{c:'var(--good)',     ic:'', lbl:'Düşük'},
+};
+const SEV = {critical:'', serious:'', warning:'', medium:''};
+let state = {devices:{}, filter:'all', es:null};
+
+// --- ağ otomatik doldur ---
+fetch('/api/network').then(r=>r.json()).then(d=>{ $('#network').placeholder=d.network; });
+
+// --- kontroller ---
+$('#scanBtn').onclick = startScan;
+$('#stopBtn').onclick = ()=>fetch('/api/stop',{method:'POST'});
+$('#exportBtn').onclick = ()=>window.location='/api/export';
+$('#filters').onclick = e=>{
+  if(e.target.tagName!=='BUTTON') return;
+  [...$('#filters').children].forEach(b=>b.classList.remove('on'));
+  e.target.classList.add('on'); state.filter=e.target.dataset.f; renderDevices();
+};
+
+// --- log konsolu ---
+function logLine(sel, d){
+  const body=$(sel); if(!body) return;
+  const first=body.querySelector('.log-line.info .lm');
+  if(first && body.children.length===1 && !first.dataset.real){ body.innerHTML=''; }
+  const div=document.createElement('div');
+  div.className='log-line '+(d.level||'info');
+  div.innerHTML=`<span class="lt">${d.time||''}</span><span class="lm">${escapeHtml(d.msg||'')}</span>`;
+  body.appendChild(div);
+  body.scrollTop=body.scrollHeight;
+}
+$('#logClear').onclick=()=>{ $('#logBody').innerHTML=''; };
+
+function startScan(){
+  const network = $('#network').value.trim() || $('#network').placeholder;
+  const mode = $('#mode').value;
+  state.devices = {};
+  $('#devices').innerHTML=''; $('#devEmpty').style.display='none';
+  $('#logBody').innerHTML='';
+  setBtns(true);
+  fetch('/api/scan',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({network, mode})}).then(r=>r.json()).then(()=>openStream());
+}
+
+function openStream(){
+  if(state.es) state.es.close();
+  const es = new EventSource('/api/stream'); state.es=es;
+  es.addEventListener('snapshot', e=>applySnapshot(JSON.parse(e.data)));
+  es.addEventListener('phase',    e=>{const d=JSON.parse(e.data); setPhase(d.state,d.phase);});
+  es.addEventListener('discovered', e=>{const d=JSON.parse(e.data);
+    setPhase('keşif', `Canlı cihaz bulundu: ${d.count}`);});
+  es.addEventListener('progress', e=>{const d=JSON.parse(e.data);
+    setProgress(d.progress); if(d.summary) applySummary(d.summary);});
+  es.addEventListener('device',   e=>{const d=JSON.parse(e.data).device; upsertDevice(d, true);});
+  es.addEventListener('log',      e=>{const d=JSON.parse(e.data); logLine('#logBody', d);});
+  es.addEventListener('done',     e=>{const d=JSON.parse(e.data);
+    setPhase(d.state, d.state==='bitti'?'Tarama tamamlandı':d.state);
+    setProgress(100); if(d.summary) applySummary(d.summary); setBtns(false); es.close();});
+  es.addEventListener('error',    ()=>{ /* bağlantı düşerse tarayıcı yeniden dener */ });
+}
+
+function applySnapshot(s){
+  setPhase(s.state, s.phase); setProgress(s.progress||0);
+  (s.devices||[]).forEach(d=>upsertDevice(d,false));
+  if(s.summary) applySummary(s.summary);
+  if(['keşif','tarama','analiz'].includes(s.state)) setBtns(true); else setBtns(false);
+}
+
+// --- UI güncelleyiciler ---
+function setBtns(running){
+  $('#scanBtn').disabled=running; $('#stopBtn').disabled=!running;
+  $('#exportBtn').disabled=running || Object.keys(state.devices).length===0;
+  $('#statusDot').style.background = running ? 'var(--warning)' : 'var(--good)';
+}
+function setPhase(st, ph){
+  const chip=$('#stateChip'); chip.textContent=st;
+  chip.className='state-chip'+(['keşif','tarama','analiz'].includes(st)?' live':'');
+  if(ph) $('#phaseText').textContent=ph;
+}
+function setProgress(p){ $('#barFill').style.width=p+'%'; $('#pctText').textContent=Math.round(p)+'%'; }
+
+function applySummary(s){
+  $('#kTotal').textContent=s.total||0;
+  $('#kIot').textContent=s.iot||0;
+  $('#kPorts').textContent=s.open_ports||0;
+  $('#kVuln').textContent=s.vuln||0;
+  $('#kRisk').innerHTML=(s.avg_risk||0)+'<small>/100</small>';
+  renderRiskChart(s.risk_buckets||{}, s.total||0);
+  renderPortChart(s.top_ports||[]);
+}
+
+function renderRiskChart(b, total){
+  const order=['critical','serious','warning','good'];
+  const max=Math.max(1, ...order.map(k=>b[k]||0));
+  $('#riskChart').innerHTML = order.map(k=>{
+    const n=b[k]||0, w=(n/max)*100, r=RISK[k];
+    return `<div class="rrow">
+      <div class="rlbl">${r.lbl}</div>
+      <div class="rbar"><span style="width:${w}%;background:${r.c}"></span></div>
+      <div class="rn">${n}</div></div>`;
+  }).join('') || '<div class="empty">Veri yok</div>';
+}
+
+function renderPortChart(ports){
+  if(!ports.length){ $('#portChart').innerHTML='<div class="empty">Açık port bulunamadı</div>'; return; }
+  const max=Math.max(...ports.map(p=>p.count));
+  $('#portChart').innerHTML = ports.map(p=>{
+    const w=(p.count/max)*100;
+    return `<div class="pbar-row">
+      <div class="plbl"><b>${p.port}</b> ${p.label?('· '+escapeHtml(p.label)):''}</div>
+      <div class="pbar"><span style="width:${w}%"></span></div>
+      <div class="pn">${p.count}</div></div>`;
+  }).join('');
+}
+
+// --- cihaz kartları ---
+function upsertDevice(d, isNew){
+  state.devices[d.ip]=d;
+  $('#devEmpty').style.display='none';
+  renderDevices(isNew ? d.ip : null);
+}
+
+function renderDevices(highlightIp){
+  const el=$('#devices');
+  let list=Object.values(state.devices);
+  list.sort((a,b)=>b.risk_score-a.risk_score);
+  if(state.filter==='iot') list=list.filter(d=>d.is_iot);
+  if(state.filter==='vuln') list=list.filter(d=>d.vulns.length);
+  if(!list.length){ el.innerHTML=''; $('#devEmpty').style.display='block';
+    $('#devEmpty').textContent = Object.keys(state.devices).length? 'Bu filtreye uyan cihaz yok.' : 'Henüz cihaz taranmadı.';
+    return; }
+  el.innerHTML = list.map(d=>deviceCard(d, d.ip===highlightIp)).join('');
+}
+
+function deviceCard(d, isNew){
+  const r=RISK[d.risk_level];
+  const ports = d.open_ports.map(p=>`
+    <div class="port-line"><span class="pp mono">${p.port}</span>
+      <span class="ps">${escapeHtml(p.service||'-')}</span>
+      <span class="pb mono">${escapeHtml((p.banner||'').replace(/\s+/g,' ').slice(0,70))||'—'}</span></div>`).join('')
+    || '<div class="empty">Açık port yok</div>';
+  const vulns = d.vulns.length ? d.vulns.map(vulnCard).join('')
+    : '<div class="vuln-empty">Bu modda bu cihazda bulgu yok</div>';
+  const fw = d.firmware||{};
+  const fwLine = (fw.model||fw.fw_version||fw.server)
+    ? `<div class="dev-meta">Firmware: ${escapeHtml([fw.model,fw.fw_version].filter(Boolean).join(' '))||escapeHtml(fw.server)}
+        ${fw.source?`<span style="color:var(--text-3)">(${escapeHtml(fw.source)})</span>`:''}</div>` : '';
+  const fwDetail = (fw.hints&&fw.hints.length)
+    ? `<div class="mt"><h4>Firmware / Model İpuçları (ağ üzerinden)</h4>${
+        fw.hints.map(h=>`<div class="port-line"><span class="pb mono">${escapeHtml(h)}</span></div>`).join('')}</div>` : '';
+  const eps = d.fw_endpoints||[];
+  const epsHtml = eps.length
+    ? `<div class="mt"><h4>Tespit Edilen Firmware/Config Uç Noktaları</h4>${
+        eps.map(e=>`<div class="port-line"><span class="ps">${e.kind}</span>
+          <span class="pb mono">${escapeHtml(e.url)} · ${(e.size/1024).toFixed(0)} KB</span></div>`).join('')}</div>` : '';
+  const grabBtn = `<div class="mt"><button onclick="grabDevice('${d.ip}')" style="background:var(--accent);border-color:var(--accent);color:#fff">
+      Bu cihazdan firmware/config çekmeyi dene</button>
+      <div style="color:var(--text-3);font-size:11px;margin-top:5px">Bilinen indirme/yedek uç noktalarını yoklar; korumasız olanı .bin kaydeder.</div></div>`;
+  return `<div class="dev ${isNew?'new':''}" data-ip="${d.ip}">
+    <div class="dev-top" onclick="this.parentNode.classList.toggle('open')">
+      <div class="dev-ic">${d.icon}</div>
+      <div class="dev-main">
+        <div class="dev-ip mono">${d.ip}</div>
+        <div class="dev-meta">${escapeHtml(d.device_type)} · ${escapeHtml(d.vendor)}
+          ${d.is_iot?'· <span class="iot">IoT</span>':''}</div>
+        ${fwLine}
+      </div>
+      <div class="badge b-${d.risk_level}">${r.lbl} ${d.risk_score}</div>
+    </div>
+    <div class="dev-stat">
+      <span><b>${d.open_ports.length}</b> açık port</span>
+      <span><b>${d.vulns.length}</b> bulgu</span>
+      <span class="mono" style="color:var(--text-3)">${d.mac}</span>
+    </div>
+    <div class="dev-detail">
+      <h4>Açık Portlar & Servisler</h4>${ports}
+      <div class="mt"><h4>Güvenlik Bulguları</h4>${vulns}</div>
+      ${fwDetail}${epsHtml}${grabBtn}
+    </div></div>`;
+}
+
+const SEVLBL={critical:{ic:'',lbl:'KRİTİK'},serious:{ic:'',lbl:'CİDDİ'},
+  warning:{ic:'',lbl:'UYARI'},medium:{ic:'',lbl:'ORTA'},good:{ic:'',lbl:'DÜŞÜK'}};
+
+// Büyük & detaylı bulgu kartı (hem cihaz zafiyetleri hem firmware bulguları için)
+function vulnCard(v){
+  const s=SEVLBL[v.severity]||SEVLBL.medium;
+  const isCve = v.cve && v.cve!=='-' && /^CVE-/.test(v.cve);
+  const chip=`<span class="sev-chip ${v.severity}">${s.lbl}${v.cvss!=null&&v.cvss!==''?(' · CVSS '+v.cvss):''}</span>`;
+  const cve = isCve
+    ? `<span class="vuln-cve"><a href="https://nvd.nist.gov/vuln/detail/${v.cve}" target="_blank" rel="noopener">${v.cve}</a></span>`
+    : (v.cve && v.cve!=='-' ? `<span class="vuln-cve">${escapeHtml(v.cve)}</span>` : '');
+  const src = v.source ? `<span class="vsrc">kaynak: ${escapeHtml(v.source)}</span>` : '';
+  const title = v.title || v.service || (v.port?('Port '+v.port):'Bulgu');
+  const meta=[];
+  if(v.port) meta.push(`<b>Port:</b> ${v.port}`);
+  if(v.service) meta.push(`<b>Servis:</b> ${escapeHtml(v.service)}`);
+  if(v.version && v.version!=='bilinmiyor') meta.push(`<b>Sürüm:</b> ${escapeHtml(v.version)}`);
+  if(v.kind) meta.push(`<b>Tür:</b> ${escapeHtml(v.kind)}`);
+  if(v.vector) meta.push(`<b>Vektör:</b> <span class="vuln-vector">${escapeHtml(v.vector)}</span>`);
+  const detail = v.detail || v.note || '';
+  return `<div class="vuln ${v.severity}">
+    <div class="vuln-head">${chip} ${cve} ${src}</div>
+    <div class="vuln-title">${escapeHtml(title)}</div>
+    ${detail?`<div class="vuln-desc">${escapeHtml(detail)}</div>`:''}
+    ${meta.length?`<div class="vuln-meta">${meta.join('')}</div>`:''}
+  </div>`;
+}
+
+function escapeHtml(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ============ CİHAZDAN FIRMWARE/CONFIG ÇEKME ============ */
+function grabDevice(ip){
+  logLine('#logBody',{level:'head',time:'',msg:'['+ip+'] firmware/config çekme deneniyor…'});
+  fetch('/api/firmware/grab',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip})})
+    .then(r=>r.json()).then(d=>{
+      if(d.error){ logLine('#logBody',{level:'warn',time:'',msg:'HATA: '+d.error}); return; }
+      const es=new EventSource('/api/firmware/fetch/stream');
+      es.addEventListener('log', e=>logLine('#logBody',JSON.parse(e.data)));
+      es.addEventListener('done', e=>{ renderGrabbed(ip, JSON.parse(e.data).result); es.close(); });
+      es.addEventListener('idle', ()=>es.close());
+    });
+}
+function renderGrabbed(ip, r){
+  if(!r){ return; }
+  const saved=r.saved||[];
+  if(!saved.length){
+    logLine('#logBody',{level:'ok',time:'',msg:'['+ip+'] korumasız çekilebilir dosya bulunamadı'});
+    return;
+  }
+  $('#grabbedWrap').style.display='block';
+  const list=$('#grabbedList');
+  saved.forEach(f=>{
+    const div=document.createElement('div');
+    div.className='fw-dl-box'; div.style.display='block';
+    div.innerHTML=`<div><b>${escapeHtml(ip)}</b> → <b>${escapeHtml(f.name)}</b> · <span class="mono">${(f.size/1024).toFixed(1)} KB</span>
+        <span class="vsrc">${escapeHtml(f.kind||'dosya')}</span></div>
+      <div class="mono" style="color:var(--text-3);font-size:11px;margin-top:4px">SHA-256: ${f.sha256}</div>
+      <div class="row">
+        <a class="btn-dl" style="text-decoration:none;padding:8px 14px;border-radius:0;border:1px solid var(--good);display:inline-block"
+           href="/api/firmware/download?name=${encodeURIComponent(f.name)}" download>.bin indir</a>
+        <button onclick="analyzePath('${f.path.replace(/'/g,"\\'")}')">Analiz et</button>
+      </div>`;
+    list.appendChild(div);
+  });
+  document.querySelector('.fw-panel').scrollIntoView({behavior:'smooth'});
+}
+function analyzePath(p){
+  $('#fwPath').value=p;
+  startFwJob(fetch('/api/firmware',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:p})}));
+}
+
+/* ===================== FIRMWARE İNDİRME ===================== */
+let lastDownloaded=null;
+$('#dlBtn').onclick=()=>{
+  const url=$('#dlUrl').value.trim();
+  if(!/^https?:\/\//i.test(url)){ alert('http(s):// ile başlayan bir URL gir.'); return; }
+  $('#dlLog').innerHTML=''; $('#dlResult').style.display='none'; $('#dlBtn').disabled=true;
+  logLine('#dlLog',{level:'info',time:'',msg:'İndirme isteği gönderiliyor…'});
+  fetch('/api/firmware/fetch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})})
+    .then(r=>r.json()).then(d=>{
+      if(d.error){ logLine('#dlLog',{level:'warn',time:'',msg:'HATA: '+d.error}); $('#dlBtn').disabled=false; return; }
+      const es=new EventSource('/api/firmware/fetch/stream');
+      es.addEventListener('log', e=>logLine('#dlLog',JSON.parse(e.data)));
+      es.addEventListener('done', e=>{ renderDownload(JSON.parse(e.data).result); $('#dlBtn').disabled=false; es.close(); });
+      es.addEventListener('idle', ()=>{ $('#dlBtn').disabled=false; es.close(); });
+    }).catch(()=>{ $('#dlBtn').disabled=false; });
+};
+function renderDownload(r){
+  if(!r || !r.ok){ logLine('#dlLog',{level:'warn',time:'',msg:'İndirilemedi: '+((r&&r.error)||'')}); return; }
+  lastDownloaded=r.path;
+  $('#dlName').textContent=r.name;
+  $('#dlSize').textContent=(r.size/1024/1024).toFixed(2)+' MB';
+  $('#dlSha').textContent='SHA-256: '+r.sha256;
+  $('#dlDownload').href='/api/firmware/download?name='+encodeURIComponent(r.name);
+  $('#dlAnalyze').onclick=()=>{ $('#fwPath').value=r.path;
+    document.querySelector('.fw-panel').scrollIntoView({behavior:'smooth'});
+    startFwJob(fetch('/api/firmware',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:r.path})})); };
+  $('#dlResult').style.display='block';
+}
+
+/* ===================== FIRMWARE ANALİZİ ===================== */
+const fwDrop=$('#fwDrop'), fwFile=$('#fwFile');
+fwDrop.onclick=()=>fwFile.click();
+fwFile.onchange=()=>{ if(fwFile.files[0]) uploadFirmware(fwFile.files[0]); };
+['dragover','dragenter'].forEach(ev=>fwDrop.addEventListener(ev,e=>{e.preventDefault();fwDrop.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>fwDrop.addEventListener(ev,e=>{e.preventDefault();fwDrop.classList.remove('drag');}));
+fwDrop.addEventListener('drop',e=>{ if(e.dataTransfer.files[0]) uploadFirmware(e.dataTransfer.files[0]); });
+$('#fwAnalyze').onclick=()=>{
+  const p=$('#fwPath').value.trim();
+  if(!p){ alert('Bir dosya yolu gir ya da dosya sürükle.'); return; }
+  startFwJob(fetch('/api/firmware',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:p})}));
+};
+function uploadFirmware(file){
+  const fd=new FormData(); fd.append('file',file);
+  $('#fwPath').value=file.name;
+  startFwJob(fetch('/api/firmware',{method:'POST',body:fd}));
+}
+function startFwJob(promise){
+  $('#fwLog').innerHTML=''; $('#fwResult').style.display='none';
+  $('#fwAnalyze').disabled=true;
+  logLine('#fwLog',{level:'info',time:'',msg:'Dosya yükleniyor / analiz kuyruğa alınıyor…'});
+  promise.then(r=>r.json()).then(d=>{
+    if(d.error){ logLine('#fwLog',{level:'warn',time:'',msg:'HATA: '+d.error}); $('#fwAnalyze').disabled=false; return; }
+    openFwStream();
+  }).catch(()=>{ $('#fwAnalyze').disabled=false; });
+}
+function openFwStream(){
+  const es=new EventSource('/api/firmware/stream');
+  es.addEventListener('log', e=>logLine('#fwLog',JSON.parse(e.data)));
+  es.addEventListener('done', e=>{
+    const d=JSON.parse(e.data); renderFwResult(d.result);
+    $('#fwAnalyze').disabled=false; es.close();
+  });
+  es.addEventListener('idle', ()=>es.close());
+}
+function renderFwResult(r){
+  if(!r || !r.ok){ logLine('#fwLog',{level:'warn',time:'',msg:'Analiz tamamlanamadı: '+((r&&r.error)||'')}); return; }
+  const f=r.file;
+  $('#fwFileInfo').innerHTML=[
+    ['Dosya',f.name],['Boyut',(f.size/1024/1024).toFixed(2)+' MB'],
+    ['Tür',f.type],['Entropi',f.entropy+'/8 — '+f.entropy_verdict],
+    ['SHA-256',f.sha256.slice(0,24)+'…'],['Risk',r.risk_score+'/100 ('+RISK[r.risk_level].lbl+')']
+  ].map(([k,v])=>`<div class="cell"><div class="k">${k}</div><div class="v">${escapeHtml(String(v))}</div></div>`).join('');
+  // imzalar
+  $('#fwSigs').innerHTML = r.signatures.length
+    ? '<h4 style="margin:0 0 8px;font-size:11.5px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em">Gömülü Yapılar (binwalk)</h4>'
+      + r.signatures.map(s=>`<span class="fw-sig ${s.kind}">0x${s.offset.toString(16)} · ${escapeHtml(s.description)}</span>`).join('')
+    : '';
+  // bulgular (büyük kartlar)
+  $('#fwFindings').innerHTML = r.findings.length ? r.findings.map(vulnCard).join('')
+    : '<div class="vuln-empty">Belirgin sır/zafiyet bulgusu yok</div>';
+  // bileşenler + CVE
+  $('#fwComponents').innerHTML = r.components.length ? r.components.map(c=>{
+    const cves=(c.cves||[]).map(v=>`<a href="https://nvd.nist.gov/vuln/detail/${v.cve}" target="_blank" rel="noopener" style="color:#8fd0ff;text-decoration:none">${v.cve}</a> <span style="color:var(--text-3)">(${v.cvss})</span>`).join(', ');
+    return `<div class="port-line"><span class="ps"><b>${escapeHtml(c.name)}</b> ${escapeHtml(c.version)}</span>
+      <span class="pb">${cves||'<span style="color:var(--text-3)">CVSS≥7 CVE yok</span>'}</span></div>`;
+  }).join('') : '<div class="empty">Tanınan bileşen bulunamadı</div>';
+  $('#fwResult').style.display='block';
+}
+
+// sayfa yenilenirse devam eden taramayı yakala
+fetch('/api/status').then(r=>r.json()).then(s=>{ if(s.state && s.state!=='hazır'){ applySnapshot(s); openStream(); }});
+</script>
+</body>
+</html>

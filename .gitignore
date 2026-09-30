@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+downloads/
+*.log
+sonuc.json
+iot-rapor-*.json
+samples/*.bin
+.vscode/
+.idea/
+.DS_Store
